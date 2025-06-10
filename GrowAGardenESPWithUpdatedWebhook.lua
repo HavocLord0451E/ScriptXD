@@ -2,10 +2,7 @@
 local replicatedStorage = game:GetService("ReplicatedStorage")
 local collectionService = game:GetService("CollectionService")
 local players = game:GetService("Players")
-local teleportService = game:GetService("TeleportService")
 local userInputService = game:GetService("UserInputService")
-local virtualUser = game:GetService("VirtualUser")
-local httpService = game:GetService("HttpService")
 
 -- Wait for game to load
 if not game:IsLoaded() then
@@ -42,15 +39,8 @@ local success, scriptError = pcall(function()
     local espCache = {}
     local activeEggs = {}
     local espEnabled = true
-    local autoRejoinEnabled = true -- Always enabled
-    local lastRejoinTime = 0
-    local REJOIN_COOLDOWN = 5
     local isGuiMinimized = false
-    local targetPets = {"Dragonfly", "Butterfly", "Racoon", "Disco Bee", "Red Fox", "Queen Bee"}
-    local MAX_REJOIN_ATTEMPTS = 3
     local eggModels, eggPets
-    local rejoinAttempts = 0
-    local WEBHOOK_URL = "https://discord.com/api/webhooks/1381613936205496350/g1miV-yKl1i_c-LEIAcMi5RBSno9A85Snv4c9xIsu6pjhNl1G3qtVNpWVlaz_uJ724JM"
 
     -- Attempt to get pet egg data with enhanced error handling
     local hatchFunction
@@ -88,8 +78,8 @@ local success, scriptError = pcall(function()
 
     -- Create main frame
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 400, 0, 450)
-    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -225)
+    mainFrame.Size = UDim2.new(0, 400, 0, 350) -- Reduced height due to fewer elements
+    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -175)
     mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     mainFrame.BackgroundTransparency = 0.1
     mainFrame.Parent = screenGui
@@ -222,22 +212,10 @@ local success, scriptError = pcall(function()
     espToggleCorner.CornerRadius = UDim.new(0, 8)
     espToggleCorner.Parent = espToggleButton
 
-    -- Scan status label
-    local scanStatus = Instance.new("TextLabel")
-    scanStatus.Size = UDim2.new(0.9, 0, 0, 30)
-    scanStatus.Position = UDim2.new(0.05, 0, 0.3, 0)
-    scanStatus.BackgroundTransparency = 1
-    scanStatus.Text = "Scan: Idle"
-    scanStatus.TextColor3 = Color3.fromRGB(180, 180, 180)
-    scanStatus.Font = Enum.Font.Gotham
-    scanStatus.TextSize = 16
-    scanStatus.ZIndex = 1
-    scanStatus.Parent = mainFrame
-
     -- Error label
     local errorLabel = Instance.new("TextLabel")
     errorLabel.Size = UDim2.new(0.9, 0, 0, 30)
-    errorLabel.Position = UDim2.new(0.05, 0, 0.38, 0)
+    errorLabel.Position = UDim2.new(0.05, 0, 0.3, 0)
     errorLabel.BackgroundTransparency = 1
     errorLabel.Text = ""
     errorLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
@@ -249,7 +227,7 @@ local success, scriptError = pcall(function()
     -- Egg list header
     local eggListHeader = Instance.new("TextLabel")
     eggListHeader.Size = UDim2.new(0.9, 0, 0, 30)
-    eggListHeader.Position = UDim2.new(0.05, 0, 0.46, 0)
+    eggListHeader.Position = UDim2.new(0.05, 0, 0.38, 0)
     eggListHeader.BackgroundTransparency = 1
     eggListHeader.Text = "My Eggs"
     eggListHeader.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -261,7 +239,7 @@ local success, scriptError = pcall(function()
     -- Egg list scrolling frame
     local eggListFrame = Instance.new("ScrollingFrame")
     eggListFrame.Size = UDim2.new(0.9, 0, 0, 150)
-    eggListFrame.Position = UDim2.new(0.05, 0, 0.54, 0)
+    eggListFrame.Position = UDim2.new(0.05, 0, 0.46, 0)
     eggListFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     eggListFrame.BackgroundTransparency = 0.5
     eggListFrame.ScrollBarThickness = 6
@@ -489,144 +467,6 @@ local success, scriptError = pcall(function()
         end
     end
 
-    -- Function to send a message to Discord webhook
-    local function SendWebhookMessage(playerName, petName, serverId)
-        local success, err = pcall(function()
-            local message = string.format("%s found %s in Grow a Garden! Server ID: %s", playerName, petName, serverId)
-            local payload = {
-                content = message
-            }
-            local jsonPayload = httpService:JSONEncode(payload)
-            httpService:PostAsync(WEBHOOK_URL, jsonPayload, Enum.HttpContentType.ApplicationJson)
-        end)
-        if success then
-            ShowNotification("Sent message to Discord: " .. petName .. " found!")
-        else
-            ShowError("Failed to send Discord message: " .. tostring(err))
-        end
-    end
-
-    -- Function to scan for target pets
-    local function ScanForTargetPets()
-        if not eggPets then
-            scanStatus.Text = "Scan: No Pet Data"
-            ShowError("No pet data available. Auto-rejoin disabled.")
-            return false
-        end
-        scanStatus.Text = "Scan: Checking for target pets..."
-        for objectId, petName in pairs(eggPets) do
-            if table.find(targetPets, petName) then
-                scanStatus.Text = "Scan: " .. petName .. " Found!"
-                local message = petName .. " found in Grow a Garden by " .. localPlayer.Name .. "!"
-                ShowNotification(message)
-                SendWebhookMessage(localPlayer.Name, petName, game.JobId)
-                return true
-            end
-        end
-        scanStatus.Text = "Scan: Target Pet Not Found"
-        ShowNotification("Target pet not found, rejoining...")
-        return false
-    end
-
-    -- Function to simulate fake activity (anti-detection)
-    local function SimulateFakeActivity()
-        local success, err = pcall(function()
-            virtualUser:ClickButton1(Vector2.new(math.random(100, 500), math.random(100, 500)))
-            ShowNotification("Simulated click to avoid detection")
-        end)
-        if not success then
-            print("SimulateFakeActivity failed (likely executor does not support VirtualUser): " .. tostring(err))
-        end
-    end
-
-    -- Function to rejoin server with retry logic and anti-detection
-    local function RejoinServer()
-        if tick() - lastRejoinTime < REJOIN_COOLDOWN then
-            wait(REJOIN_COOLDOWN - (tick() - lastRejoinTime))
-        end
-        lastRejoinTime = tick()
-        local placeId = game.PlaceId
-        local attempt = 1
-        local retryDelays = {5, 7, 10}
-        rejoinAttempts = rejoinAttempts + 1
-
-        -- Only simulate activity if supported
-        SimulateFakeActivity()
-        wait(math.random(1, 3))
-
-        while attempt <= MAX_REJOIN_ATTEMPTS do
-            scanStatus.Text = string.format("Scan: Rejoining Server (Attempt %d/%d)...", attempt, MAX_REJOIN_ATTEMPTS)
-            ShowNotification(string.format("Attempting to rejoin server (%d/%d)", attempt, MAX_REJOIN_ATTEMPTS))
-
-            local success, err = pcall(function()
-                teleportService:Teleport(placeId, localPlayer)
-            end)
-
-            if success then
-                scanStatus.Text = "Scan: Rejoin Initiated"
-                return true
-            else
-                local errorMessage = tostring(err)
-                print("Rejoin attempt failed:", errorMessage)
-                if errorMessage:lower():find("teleport failed") then
-                    ShowError("Teleport failed: " .. errorMessage)
-                    return false
-                end
-                if attempt == MAX_REJOIN_ATTEMPTS then
-                    scanStatus.Text = "Scan: Rejoin Failed"
-                    ShowError(string.format("Rejoin failed after %d attempts: %s. Try manually.", MAX_REJOIN_ATTEMPTS, errorMessage))
-                    return false
-                else
-                    local delayTime = retryDelays[attempt] or 5
-                    ShowNotification(string.format("Server full or error occurred. Retrying in %d seconds...", delayTime))
-                    wait(delayTime)
-                    attempt = attempt + 1
-                end
-            end
-        end
-        return false
-    end
-
-    -- Auto-rejoin logic
-    local function StartAutoRejoin()
-        if not autoRejoinEnabled then
-            print("Auto-rejoin not started: autoRejoinEnabled is false")
-            return
-        end
-
-        -- Wait for eggPets to be loaded before starting
-        local maxWaitAttempts = 10
-        local waitAttempts = 0
-        while not eggPets and waitAttempts < maxWaitAttempts do
-            wait(1)
-            waitAttempts = waitAttempts + 1
-        end
-        if not eggPets then
-            ShowError("No pet data available after waiting. Auto-rejoin disabled.")
-            autoRejoinEnabled = false
-            return
-        end
-
-        spawn(function()
-            while autoRejoinEnabled do
-                local found = ScanForTargetPets()
-                if found then
-                    autoRejoinEnabled = false
-                    break
-                else
-                    if not RejoinServer() then
-                        autoRejoinEnabled = false
-                        break
-                    end
-                end
-                wait(1)
-            end
-        end)
-    end
-
-    -- Start auto-rejoin
-    StartAutoRejoin()
-
     -- Minimize button click
     minimizeButton.MouseButton1Click:Connect(function()
         isGuiMinimized = not isGuiMinimized
@@ -768,11 +608,8 @@ local success, scriptError = pcall(function()
     UpdateStatus()
     UpdateEggList()
 
-    -- Startup warning
-    ShowNotification("WARNING: Auto-rejoin may violate game rules. Use in private servers only.")
-
     -- Confirm script loaded
-    print("Grow a Garden ESP script with updated webhook loaded successfully at " .. os.date("%I:%M %p IST, %A, %B %d, %Y"))
+    print("Grow a Garden ESP script loaded successfully at " .. os.date("%I:%M %p IST, %A, %B %d, %Y"))
 end)
 
 -- Handle script loading errors
@@ -796,4 +633,4 @@ if not success then
     errorText.TextSize = 14
     errorText.TextWrapped = true
     errorText.Parent = errorFrame
-end
+        end
